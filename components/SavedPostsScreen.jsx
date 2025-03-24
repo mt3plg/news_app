@@ -71,7 +71,7 @@ export default function SavedPostsScreen({ navigation: propNavigation }) {
                     ]),
                 ]).start();
             } catch (error) {
-                console.error('Помилка при завантаженні збережених постів:', error);
+                console.error('Error loading saved posts:', error);
             }
         };
         loadSavedPosts();
@@ -118,7 +118,7 @@ export default function SavedPostsScreen({ navigation: propNavigation }) {
                         ]),
                     ]).start();
                 } catch (error) {
-                    console.error('Помилка при завантаженні збережених постів:', error);
+                    console.error('Error loading saved posts:', error);
                 }
             };
             loadSavedPosts();

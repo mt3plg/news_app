@@ -55,9 +55,9 @@ export default function LatestNews() {
                 setData(response.data);
                 setLoading(false);
             } catch (err) {
-                setError('Не вдалося завантажити новини');
+                setError('Could not load news');
                 setLoading(false);
-                console.error('Помилка при завантаженні новин:', err);
+                console.error('Error loading news:', err);
             }
         };
 
@@ -67,7 +67,7 @@ export default function LatestNews() {
     if (loading) {
         return (
             <View style={styles.loadingContainer}>
-                <Text style={styles.loadingText}>Завантаження...</Text>
+                <Text style={styles.loadingText}>Loading...</Text>
             </View>
         );
     }

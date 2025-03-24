@@ -39,7 +39,7 @@ export default function PostView({ route, navigation }) {
                 const isPostSaved = savedPosts.some((p) => p.id === post.id);
                 setIsSaved(isPostSaved);
             } catch (error) {
-                console.error('Помилка при перевірці збережених постів:', error);
+                console.error('Error checking saved posts:', error);
             }
         };
         checkIfSaved();
@@ -62,7 +62,7 @@ export default function PostView({ route, navigation }) {
             await AsyncStorage.setItem('savedPosts', JSON.stringify(savedPosts));
             setIsSaved((prev) => !prev);
         } catch (error) {
-            console.error('Помилка при збереженні поста:', error);
+            console.error('Error saving a post:', error);
         }
     };
 

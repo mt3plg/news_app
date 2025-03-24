@@ -31,9 +31,9 @@ export default function SearchScreen({ navigation }) {
                 setFilteredPosts(response.data);
                 setLoading(false);
             } catch (err) {
-                setError('Не вдалося завантажити пости');
+                setError('Could not load posts');
                 setLoading(false);
-                console.error('Помилка при завантаженні постів:', err);
+                console.error('Error loading posts:', err);
             }
         };
 
