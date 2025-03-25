@@ -1,6 +1,5 @@
-import { StatusBar } from 'expo-status-bar';
 import React, { useState } from 'react';
-import { StyleSheet, View, SafeAreaView, ScrollView } from 'react-native';
+import { StyleSheet, View, SafeAreaView } from 'react-native';
 import AppLoading from 'expo-app-loading';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
     SafeAreaView,
     View,
@@ -24,6 +24,79 @@ const ITEM_WIDTH = width * 0.7;
 const ITEM_HEIGHT = ITEM_WIDTH * 1.6;
 const VISIBLE_ITEMS = 3;
 
+const PostItem = React.memo(({ item, index: itemIndex, scrollXAnimated, fadeAnim, slideAnim, textFadeAnim, textScaleAnim, onPress }) => {
+    const inputRange = [itemIndex - 1, itemIndex, itemIndex + 1];
+    const translateX = scrollXAnimated.interpolate({
+        inputRange,
+        outputRange: [100, 0, -100],
+        extrapolate: 'clamp',
+    });
+    const scale = scrollXAnimated.interpolate({
+        inputRange,
+        outputRange: [0.7, 1, 0.7],
+        extrapolate: 'clamp',
+    });
+    const opacity = scrollXAnimated.interpolate({
+        inputRange,
+        outputRange: [0, 1, 0],
+        extrapolate: 'clamp',
+    });
+    const rotate = scrollXAnimated.interpolate({
+        inputRange,
+        outputRange: ['10deg', '0deg', '-10deg'],
+        extrapolate: 'clamp',
+    });
+    const translateY = scrollXAnimated.interpolate({
+        inputRange,
+        outputRange: [20, 0, 20],
+        extrapolate: 'clamp',
+    });
+
+    return (
+        <TouchableOpacity onPress={() => onPress(item)} activeOpacity={0.8}>
+            <Animated.View
+                style={{
+                    position: 'absolute',
+                    left: -ITEM_WIDTH / 2,
+                    opacity: Animated.multiply(fadeAnim, opacity),
+                    transform: [
+                        { translateX },
+                        { scale },
+                        { rotate },
+                        { translateY: Animated.add(slideAnim, translateY) },
+                    ],
+                    height: ITEM_HEIGHT,
+                    borderRadius: 20,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 6 },
+                    shadowOpacity: 0.4,
+                    shadowRadius: 12,
+                    elevation: 12,
+                }}
+            >
+                <Image
+                    source={{ uri: item.imageUrl }}
+                    style={{
+                        width: ITEM_WIDTH,
+                        height: ITEM_HEIGHT,
+                        borderRadius: 20,
+                    }}
+                />
+                <Animated.View
+                    style={{
+                        ...styles.textContainer,
+                        opacity: textFadeAnim,
+                        transform: [{ scale: textScaleAnim }],
+                    }}
+                >
+                    <Text style={styles.title}>{item.title}</Text>
+                    <Text style={styles.date}>{item.createdAt}</Text>
+                </Animated.View>
+            </Animated.View>
+        </TouchableOpacity>
+    );
+});
+
 export default function SavedPostsScreen({ navigation: propNavigation }) {
     const navigation = useNavigation();
     const [savedPosts, setSavedPosts] = useState([]);
@@ -36,96 +109,57 @@ export default function SavedPostsScreen({ navigation: propNavigation }) {
     const textFadeAnim = useRef(new Animated.Value(0)).current;
     const textScaleAnim = useRef(new Animated.Value(0.8)).current;
 
-    useEffect(() => {
-        const loadSavedPosts = async () => {
-            try {
-                const saved = await AsyncStorage.getItem('savedPosts');
-                const posts = saved ? JSON.parse(saved) : [];
-                setSavedPosts(posts);
+    const loadSavedPosts = useCallback(async () => {
+        try {
+            const saved = await AsyncStorage.getItem('savedPosts');
+            const posts = saved ? JSON.parse(saved) : [];
+            setSavedPosts(posts);
 
-                Animated.parallel([
-                    Animated.timing(fadeAnim, {
+            fadeAnim.setValue(0);
+            slideAnim.setValue(50);
+            textFadeAnim.setValue(0);
+            textScaleAnim.setValue(0.8);
+
+            Animated.parallel([
+                Animated.timing(fadeAnim, {
+                    toValue: 1,
+                    duration: 600,
+                    useNativeDriver: true,
+                }),
+                Animated.timing(slideAnim, {
+                    toValue: 0,
+                    duration: 600,
+                    useNativeDriver: true,
+                }),
+                Animated.sequence([
+                    Animated.delay(200),
+                    Animated.spring(textFadeAnim, {
                         toValue: 1,
-                        duration: 600,
+                        friction: 8,
+                        tension: 40,
                         useNativeDriver: true,
                     }),
-                    Animated.timing(slideAnim, {
-                        toValue: 0,
-                        duration: 600,
+                    Animated.spring(textScaleAnim, {
+                        toValue: 1,
+                        friction: 8,
+                        tension: 40,
                         useNativeDriver: true,
                     }),
-                    Animated.sequence([
-                        Animated.delay(200),
-                        Animated.spring(textFadeAnim, {
-                            toValue: 1,
-                            friction: 8,
-                            tension: 40,
-                            useNativeDriver: true,
-                        }),
-                        Animated.spring(textScaleAnim, {
-                            toValue: 1,
-                            friction: 8,
-                            tension: 40,
-                            useNativeDriver: true,
-                        }),
-                    ]),
-                ]).start();
-            } catch (error) {
-                console.error('Error loading saved posts:', error);
-            }
-        };
-        loadSavedPosts();
-    }, []);
+                ]),
+            ]).start();
+        } catch (error) {
+            console.error('Error loading saved posts:', error);
+        }
+    }, [fadeAnim, slideAnim, textFadeAnim, textScaleAnim]);
 
     useEffect(() => {
-        const unsubscribe = navigation.addListener('focus', () => {
-            const loadSavedPosts = async () => {
-                try {
-                    const saved = await AsyncStorage.getItem('savedPosts');
-                    const posts = saved ? JSON.parse(saved) : [];
-                    setSavedPosts(posts);
+        loadSavedPosts();
+    }, [loadSavedPosts]);
 
-                    fadeAnim.setValue(0);
-                    slideAnim.setValue(50);
-                    textFadeAnim.setValue(0);
-                    textScaleAnim.setValue(0.8);
-
-                    Animated.parallel([
-                        Animated.timing(fadeAnim, {
-                            toValue: 1,
-                            duration: 600,
-                            useNativeDriver: true,
-                        }),
-                        Animated.timing(slideAnim, {
-                            toValue: 0,
-                            duration: 600,
-                            useNativeDriver: true,
-                        }),
-                        Animated.sequence([
-                            Animated.delay(200),
-                            Animated.spring(textFadeAnim, {
-                                toValue: 1,
-                                friction: 8,
-                                tension: 40,
-                                useNativeDriver: true,
-                            }),
-                            Animated.spring(textScaleAnim, {
-                                toValue: 1,
-                                friction: 8,
-                                tension: 40,
-                                useNativeDriver: true,
-                            }),
-                        ]),
-                    ]).start();
-                } catch (error) {
-                    console.error('Error loading saved posts:', error);
-                }
-            };
-            loadSavedPosts();
-        });
-
+    useEffect(() => {
+        const unsubscribe = navigation.addListener('focus', loadSavedPosts);
         return unsubscribe;
-    }, [navigation, fadeAnim, slideAnim, textFadeAnim, textScaleAnim]);
+    }, [navigation, loadSavedPosts]);
 
     useEffect(() => {
         if (savedPosts.length === 0) return;
@@ -139,19 +173,41 @@ export default function SavedPostsScreen({ navigation: propNavigation }) {
         }).start(() => {
             isAnimating.current = false;
         });
-    }, [index, scrollXAnimated, savedPosts]);
+    }, [index, scrollXAnimated, savedPosts.length]);
 
-    const panGesture = Gesture.Pan()
-        .minDistance(50)
-        .onEnd((event) => {
-            if (isAnimating.current) return;
-            if (typeof event.velocityX !== 'number') return;
-            if (event.velocityX < 0 && index < savedPosts.length - 1) {
-                runOnJS(setIndex)(index + 1);
-            } else if (event.velocityX > 0 && index > 0) {
-                runOnJS(setIndex)(index - 1);
-            }
-        });
+    const updateIndex = useCallback((newIndex) => {
+        setIndex(newIndex);
+    }, []);
+
+    const panGesture = useMemo(() => {
+        return Gesture.Pan()
+            .minDistance(50)
+            .onEnd((event) => {
+                if (isAnimating.current) return;
+                if (typeof event.velocityX !== 'number') return;
+                if (event.velocityX < 0 && index < savedPosts.length - 1) {
+                    runOnJS(updateIndex)(index + 1);
+                } else if (event.velocityX > 0 && index > 0) {
+                    runOnJS(updateIndex)(index - 1);
+                }
+            });
+    }, [index, savedPosts.length, updateIndex]);
+
+    const handlePress = useCallback((post) => {
+        navigation.navigate('PostView', { post });
+    }, [navigation]);
+
+    const cellRendererComponent = useCallback(
+        ({ children, style, index, ...props }) => {
+            const newStyle = [style, { zIndex: savedPosts.length - index }];
+            return (
+                <View style={newStyle} index={index} {...props}>
+                    {children}
+                </View>
+            );
+        },
+        [savedPosts.length]
+    );
 
     return (
         <SafeAreaView style={styles.container}>
@@ -184,89 +240,21 @@ export default function SavedPostsScreen({ navigation: propNavigation }) {
                                         padding: SPACING * 2,
                                     }}
                                     scrollEnabled={false}
-                                    removeClippedSubviews={false}
-                                    CellRendererComponent={({ children, style, index, ...props }) => {
-                                        const newStyle = [style, { zIndex: savedPosts.length - index }];
-                                        return (
-                                            <View style={newStyle} index={index} {...props}>
-                                                {children}
-                                            </View>
-                                        );
-                                    }}
-                                    renderItem={({ item, index: itemIndex }) => {
-                                        const inputRange = [itemIndex - 1, itemIndex, itemIndex + 1];
-                                        const translateX = scrollXAnimated.interpolate({
-                                            inputRange,
-                                            outputRange: [100, 0, -100],
-                                            extrapolate: 'clamp',
-                                        });
-                                        const scale = scrollXAnimated.interpolate({
-                                            inputRange,
-                                            outputRange: [0.7, 1, 0.7],
-                                            extrapolate: 'clamp',
-                                        });
-                                        const opacity = scrollXAnimated.interpolate({
-                                            inputRange,
-                                            outputRange: [0, 1, 0],
-                                            extrapolate: 'clamp',
-                                        });
-                                        const rotate = scrollXAnimated.interpolate({
-                                            inputRange,
-                                            outputRange: ['10deg', '0deg', '-10deg'],
-                                            extrapolate: 'clamp',
-                                        });
-                                        const translateY = scrollXAnimated.interpolate({
-                                            inputRange,
-                                            outputRange: [20, 0, 20],
-                                            extrapolate: 'clamp',
-                                        });
-                                        return (
-                                            <TouchableOpacity
-                                                onPress={() => navigation.navigate('PostView', { post: item })}
-                                                activeOpacity={0.8}
-                                            >
-                                                <Animated.View
-                                                    style={{
-                                                        position: 'absolute',
-                                                        left: -ITEM_WIDTH / 2,
-                                                        opacity: Animated.multiply(fadeAnim, opacity),
-                                                        transform: [
-                                                            { translateX },
-                                                            { scale },
-                                                            { rotate },
-                                                            { translateY: Animated.add(slideAnim, translateY) },
-                                                        ],
-                                                        height: ITEM_HEIGHT,
-                                                        borderRadius: 20,
-                                                        shadowColor: '#000',
-                                                        shadowOffset: { width: 0, height: 6 },
-                                                        shadowOpacity: 0.4,
-                                                        shadowRadius: 12,
-                                                        elevation: 12,
-                                                    }}
-                                                >
-                                                    <Image
-                                                        source={{ uri: item.imageUrl }}
-                                                        style={{
-                                                            width: ITEM_WIDTH,
-                                                            height: ITEM_HEIGHT,
-                                                            borderRadius: 20,
-                                                        }}
-                                                    />
-                                                    <Animated.View
-                                                        style={{
-                                                            ...styles.textContainer,
-                                                            opacity: textFadeAnim,
-                                                            transform: [{ scale: textScaleAnim }],
-                                                        }}
-                                                    >
-                                                        <Text style={styles.title}>{item.title}</Text>
-                                                        <Text style={styles.date}>{item.createdAt}</Text>
-                                                    </Animated.View>
-                                                </Animated.View>
-                                            </TouchableOpacity>
-                                        );
-                                    }}
+                                    removeClippedSubviews={true}
+                                    initialNumToRender={3}
+                                    CellRendererComponent={cellRendererComponent}
+                                    renderItem={({ item, index: itemIndex }) => (
+                                        <PostItem
+                                            item={item}
+                                            index={itemIndex}
+                                            scrollXAnimated={scrollXAnimated}
+                                            fadeAnim={fadeAnim}
+                                            slideAnim={slideAnim}
+                                            textFadeAnim={textFadeAnim}
+                                            textScaleAnim={textScaleAnim}
+                                            onPress={handlePress}
+                                        />
+                                    )}
                                 />
                             </View>
                         </GestureDetector>

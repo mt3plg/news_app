@@ -1,5 +1,5 @@
 import axios from 'axios';
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import {
     StatusBar,
     Image,
@@ -22,44 +22,97 @@ const ITEM_WIDTH = width * 0.7;
 const ITEM_HEIGHT = ITEM_WIDTH * 1.6;
 const VISIBLE_ITEMS = 3;
 
+const PostItem = React.memo(({ item, index: itemIndex, scrollXAnimated, onPress }) => {
+    const inputRange = [itemIndex - 1, itemIndex, itemIndex + 1];
+
+    const translateX = scrollXAnimated.interpolate({
+        inputRange,
+        outputRange: [20, 0, -200],
+        extrapolate: 'clamp',
+    });
+    const scale = scrollXAnimated.interpolate({
+        inputRange,
+        outputRange: [0.8, 0.9, 1.3],
+        extrapolate: 'clamp',
+    });
+    const opacity = scrollXAnimated.interpolate({
+        inputRange,
+        outputRange: [1 - 1 / VISIBLE_ITEMS, 1, 0],
+        extrapolate: 'clamp',
+    });
+
+    return (
+        <TouchableOpacity onPress={() => onPress(item)} activeOpacity={0.8}>
+            <Animated.View
+                style={{
+                    position: 'absolute',
+                    left: -ITEM_WIDTH / 2,
+                    opacity,
+                    transform: [{ translateX }, { scale }],
+                    height: ITEM_HEIGHT,
+                    borderRadius: 20,
+                    shadowColor: '#000',
+                    shadowOffset: { width: 0, height: 6 },
+                    shadowOpacity: 0.4,
+                    shadowRadius: 12,
+                    elevation: 12,
+                }}
+            >
+                <Image
+                    source={{ uri: item.imageUrl }}
+                    style={{
+                        width: ITEM_WIDTH,
+                        height: ITEM_HEIGHT,
+                        borderRadius: 20,
+                    }}
+                />
+                <View style={styles.textContainer}>
+                    <Text style={styles.title}>{item.title}</Text>
+                    <Text style={styles.date}>{item.createdAt}</Text>
+                </View>
+            </Animated.View>
+        </TouchableOpacity>
+    );
+});
+
 export default function News({ navigation, selectedTopic }) {
     const [data, setData] = useState([]);
-    const [filteredData, setFilteredData] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const scrollXAnimated = useRef(new Animated.Value(0)).current;
     const [index, setIndex] = useState(0);
     const isAnimating = useRef(false);
 
-    useEffect(() => {
-        const fetchPosts = async () => {
-            try {
-                setLoading(true);
-                const response = await axios.get('https://67cadc4e3395520e6af36705.mockapi.io/posts');
-                setData(response.data);
-                setLoading(false);
-            } catch (err) {
-                setError('Could not load posts');
-                setLoading(false);
-                console.error('Error loading posts:', err);
-            }
-        };
 
-        fetchPosts();
+    const fetchPosts = useCallback(async () => {
+        try {
+            setLoading(true);
+            const response = await axios.get('https://67cadc4e3395520e6af36705.mockapi.io/posts');
+            setData(response.data);
+            setLoading(false);
+        } catch (err) {
+            setError('Could not load posts');
+            setLoading(false);
+            console.error('Error loading posts:', err);
+        }
     }, []);
 
+    useEffect(() => {
+        fetchPosts();
+    }, [fetchPosts]);
+
+    const filteredData = useMemo(() => {
+        if (selectedTopic === 'ALL') {
+            return data;
+        }
+        return data.filter(
+            (post) => post.type && post.type.toUpperCase() === selectedTopic
+        );
+    }, [selectedTopic, data]);
 
     useEffect(() => {
-        if (selectedTopic === 'ALL') {
-            setFilteredData(data);
-        } else {
-            const filtered = data.filter(
-                (post) => post.type && post.type.toUpperCase() === selectedTopic
-            );
-            setFilteredData(filtered);
-        }
         setIndex(0);
-    }, [selectedTopic, data]);
+    }, [filteredData]);
 
     useEffect(() => {
         scrollXAnimated.stopAnimation();
@@ -67,24 +120,46 @@ export default function News({ navigation, selectedTopic }) {
         Animated.spring(scrollXAnimated, {
             toValue: index,
             useNativeDriver: true,
-            stiffness: 100,
-            damping: 20,
+            stiffness: 350,
+            damping: 160,
         }).start(() => {
             isAnimating.current = false;
         });
     }, [index, scrollXAnimated]);
 
-    const panGesture = Gesture.Pan()
-        .minDistance(50)
-        .onEnd((event) => {
-            if (isAnimating.current) return;
-            if (typeof event.velocityX !== 'number') return;
-            if (event.velocityX < 0 && index < filteredData.length - 1) {
-                runOnJS(setIndex)(index + 1);
-            } else if (event.velocityX > 0 && index > 0) {
-                runOnJS(setIndex)(index - 1);
-            }
-        });
+    const updateIndex = useCallback((newIndex) => {
+        setIndex(newIndex);
+    }, []);
+
+    const panGesture = useMemo(() => {
+        return Gesture.Pan()
+            .minDistance(50)
+            .onEnd((event) => {
+                if (isAnimating.current) return;
+                if (typeof event.velocityX !== 'number') return;
+                if (event.velocityX < 0 && index < filteredData.length - 1) {
+                    runOnJS(updateIndex)(index + 1);
+                } else if (event.velocityX > 0 && index > 0) {
+                    runOnJS(updateIndex)(index - 1);
+                }
+            });
+    }, [index, filteredData.length, updateIndex]);
+
+    const handlePress = useCallback((post) => {
+        navigation.navigate('PostView', { post });
+    }, [navigation]);
+
+    const cellRendererComponent = useCallback(
+        ({ children, style, index, ...props }) => {
+            const newStyle = [style, { zIndex: filteredData.length - index }];
+            return (
+                <View style={newStyle} index={index} {...props}>
+                    {children}
+                </View>
+            );
+        },
+        [filteredData.length]
+    );
 
     if (loading) {
         return (
@@ -126,68 +201,22 @@ export default function News({ navigation, selectedTopic }) {
                                 padding: SPACING * 2,
                             }}
                             scrollEnabled={false}
-                            removeClippedSubviews={false}
-                            CellRendererComponent={({ children, style, index, ...props }) => {
-                                const newStyle = [style, { zIndex: filteredData.length - index }];
-                                return (
-                                    <View style={newStyle} index={index} {...props}>
-                                        {children}
-                                    </View>
-                                );
-                            }}
-                            renderItem={({ item, index: itemIndex }) => {
-                                const inputRange = [itemIndex - 1, itemIndex, itemIndex + 1];
-                                const translateX = scrollXAnimated.interpolate({
-                                    inputRange,
-                                    outputRange: [50, 0, -100],
-                                    extrapolate: 'clamp',
-                                });
-                                const scale = scrollXAnimated.interpolate({
-                                    inputRange,
-                                    outputRange: [0.8, 1, 1.3],
-                                    extrapolate: 'clamp',
-                                });
-                                const opacity = scrollXAnimated.interpolate({
-                                    inputRange,
-                                    outputRange: [1 - 1 / VISIBLE_ITEMS, 1, 0],
-                                    extrapolate: 'clamp',
-                                });
-                                return (
-                                    <TouchableOpacity
-                                        onPress={() => navigation.navigate('PostView', { post: item })}
-                                        activeOpacity={0.8}
-                                    >
-                                        <Animated.View
-                                            style={{
-                                                position: 'absolute',
-                                                left: -ITEM_WIDTH / 2,
-                                                opacity,
-                                                transform: [{ translateX }, { scale }],
-                                                height: ITEM_HEIGHT,
-                                                borderRadius: 20,
-                                                shadowColor: '#000',
-                                                shadowOffset: { width: 0, height: 6 },
-                                                shadowOpacity: 0.4,
-                                                shadowRadius: 12,
-                                                elevation: 12,
-                                            }}
-                                        >
-                                            <Image
-                                                source={{ uri: item.imageUrl }}
-                                                style={{
-                                                    width: ITEM_WIDTH,
-                                                    height: ITEM_HEIGHT,
-                                                    borderRadius: 20,
-                                                }}
-                                            />
-                                            <View style={styles.textContainer}>
-                                                <Text style={styles.title}>{item.title}</Text>
-                                                <Text style={styles.date}>{item.createdAt}</Text>
-                                            </View>
-                                        </Animated.View>
-                                    </TouchableOpacity>
-                                );
-                            }}
+                            removeClippedSubviews={true}
+                            initialNumToRender={3}
+                            getItemLayout={(data, index) => ({
+                                length: ITEM_WIDTH,
+                                offset: (ITEM_WIDTH + SPACING * 2) * index,
+                                index,
+                            })}
+                            CellRendererComponent={cellRendererComponent}
+                            renderItem={({ item, index: itemIndex }) => (
+                                <PostItem
+                                    item={item}
+                                    index={itemIndex}
+                                    scrollXAnimated={scrollXAnimated}
+                                    onPress={handlePress}
+                                />
+                            )}
                         />
                     </View>
                 </GestureDetector>
